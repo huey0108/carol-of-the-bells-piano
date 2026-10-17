@@ -16,7 +16,7 @@ svg{width:100%;height:auto;display:block}
   <button id="play">▶ Graj</button><button id="prev">⏮ Krok</button><button id="next">Krok ⏭</button><button id="reset">⟲ Od początku</button>
   <label>Tempo <input id="tempo" type="range" min="30" max="160" value="80"> <span id="tv">80</span> BPM</label>
   <label>Takt <input id="jump" type="number" min="1" max="60" value="1" style="width:50px"></label>
-  <label><input id="snd" type="checkbox" checked> dźwięk</label>
+  <label><input id="snd" type="checkbox" checked> dźwięk</label> <span id="astat" class="info">🔈 kliknij Graj, żeby włączyć dźwięk</span>
  </div>
  <div class="bar info"><span id="pos">Takt 1 / 60</span>
   <span class="lg"><span class="sw" style="background:#3b82f6"></span>prawa ręka</span>
@@ -106,20 +106,37 @@ function render(t){
  document.getElementById('now').textContent=now.length?'Wciśnij: '+[...new Set(now)].sort().join('  ·  '):'—';
 }
 // ---------- audio ----------
-let ac=null;const audio=()=>ac||(ac=new (window.AudioContext||window.webkitAudioContext)());
+let ac=null,unlocked=false;const SIL='data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+const audio=()=>ac||(ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}));
+function setA(t){const el=document.getElementById('astat');if(el)el.textContent=t;}
+// Unlock audio inside a user gesture: resume context, play a silent buffer, and play an <audio> element
+// so iOS treats the page as media playback (sound even with the silent switch on).
+async function unlock(){
+ const a=audio();
+ try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){}
+ if(!unlocked){
+  try{const el=new Audio(SIL);el.loop=true;el.setAttribute('playsinline','');el.volume=0.01;el.play().catch(()=>{});window._silEl=el;}catch(e){}
+  try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0);}catch(e){}
+  unlocked=true;
+ }
+ if(a.state!=='running'){try{await a.resume();}catch(e){}}
+ setA(a.state==='running'?'🔊 dźwięk włączony':'🔇 dźwięk zablokowany: kliknij ponownie');
+ return a;
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ac&&ac.state!=='running')ac.resume().catch(()=>{});});
 function tone(m,when,dur){if(!document.getElementById('snd').checked)return;const a=audio(),f=440*2**((m-69)/12);
- const g=a.createGain();g.connect(a.destination);const v=m<48?.16:.12;
+ const g=a.createGain();g.connect(a.destination);const v=m<48?.22:.18;
  g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(v,when+.01);g.gain.exponentialRampToValueAtTime(v*.35,when+.4);g.gain.exponentialRampToValueAtTime(.0001,when+Math.max(.3,dur)+.25);
  for(const [h,amp,typ] of [[1,1,'triangle'],[2,.3,'sine'],[3,.1,'sine']]){const o=a.createOscillator(),og=a.createGain();o.type=typ;o.frequency.value=f*h;og.gain.value=amp;o.connect(og).connect(g);o.start(when);o.stop(when+dur+.6);}}
 // ---------- transport ----------
 let cur=0,playing=false,raf=0,startAc=0,startBeat=0,sched=0;
 const bpm=()=>+document.getElementById('tempo').value;
 function stop(){playing=false;cancelAnimationFrame(raf);document.getElementById('play').textContent='▶ Graj';}
-function play(){const a=audio();a.resume();playing=true;document.getElementById('play').textContent='⏸ Pauza';startAc=a.currentTime+.05;startBeat=cur;sched=startBeat-1e-9;loop();}
+async function play(){const a=await unlock();if(a.state!=='running')return;playing=true;document.getElementById('play').textContent='⏸ Pauza';startAc=a.currentTime+.05;startBeat=cur;sched=startBeat-1e-9;loop();}
 function loop(){const a=audio(),spb=60/bpm();const t=startBeat+(a.currentTime-startAc)/spb;
  const ahead=t+0.5/spb;for(const e of ev){if(e.t>sched&&e.t<=ahead){tone(e.m,startAc+(e.t-startBeat)*spb,e.d*spb);}}sched=Math.max(sched,ahead);
  cur=Math.max(startBeat,t);if(cur>=END){cur=0;stop();render(0);return;}render(cur);raf=requestAnimationFrame(loop);}
-function stepTo(t){stop();cur=t;render(cur);if(document.getElementById('snd').checked){const a=audio();a.resume();for(const e of ev)if(Math.abs(e.t-t)<1e-6)tone(e.m,a.currentTime+.01,Math.min(e.d,2)*60/bpm());}}
+function stepTo(t){stop();cur=t;render(cur);if(document.getElementById('snd').checked){unlock().then(a=>{for(const e of ev)if(Math.abs(e.t-t)<1e-6)tone(e.m,a.currentTime+.02,Math.min(e.d,2)*60/bpm());});}}
 document.getElementById('play').onclick=()=>playing?stop():play();
 document.getElementById('next').onclick=()=>{const n=onsets.find(o=>o>cur+1e-6);if(n!==undefined)stepTo(n);};
 document.getElementById('prev').onclick=()=>{const p=[...onsets].reverse().find(o=>o<cur-1e-6);stepTo(p??0);};
