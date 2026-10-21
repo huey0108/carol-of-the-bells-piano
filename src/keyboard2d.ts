@@ -22,26 +22,32 @@ export class Keyboard2D implements Renderer {
     svg.setAttribute('viewBox', `0 0 ${x} ${WH + 18}`);
     const pending: [number, number, boolean][] = [];
     for (const [m, wx] of whites) {
-      const r = mk('rect', { x: wx, y: 0, width: WW, height: WH, fill: '#fff', stroke: '#555', 'stroke-width': .8, rx: 2 });
+      const r = mk('rect', { x: wx, y: 0, width: WW, height: WH, fill: '#fff', stroke: '#555', 'stroke-width': .8, rx: 2, 'data-m': m });
       this.keys.set(m, { r, black: false, label: null as unknown as SVGTextElement }); pending.push([m, wx + WW / 2, false]);
       if (m % 12 === 0) { const t = mk('text', { x: wx + WW / 2, y: WH + 14, 'text-anchor': 'middle', 'font-size': 10, fill: 'currentColor' }); t.textContent = 'C' + (m / 12 - 1); }
       if (m === 60) mk('circle', { cx: wx + WW / 2, cy: WH - 8, r: 2.5, fill: '#999' });
     }
     for (const [m, bx] of blacks) {
-      const r = mk('rect', { x: bx, y: 0, width: BW, height: BH, fill: '#222', stroke: '#000', 'stroke-width': .8, rx: 1.5 });
+      const r = mk('rect', { x: bx, y: 0, width: BW, height: BH, fill: '#222', stroke: '#000', 'stroke-width': .8, rx: 1.5, 'data-m': m });
       this.keys.set(m, { r, black: true, label: null as unknown as SVGTextElement }); pending.push([m, bx + BW / 2, true]);
     }
     for (const [m, cx, b] of pending) {
       const label = mk('text', { x: cx, y: b ? BH - 6 : WH - 16, 'text-anchor': 'middle', 'font-size': b ? 7.5 : 9, 'font-weight': 700, fill: '#fff' });
       label.style.display = 'none'; this.keys.get(m)!.label = label;
     }
+    svg.querySelectorAll('text, circle').forEach(e => ((e as SVGElement).style.pointerEvents = 'none'));
     this.keyCount = this.keys.size;
     host.appendChild(svg);
   }
 
+  private last: [Map<number, KeyState>, LabelMode] = [new Map(), 'pl'];
+  private flashes = new Map<number, string>();
   update(active: Map<number, KeyState>, labels: LabelMode): void {
+    this.last = [active, labels];
     for (const [m, k] of this.keys) {
       const s = active.get(m);
+      const fh = this.flashes.get(m);
+      if (fh) { k.r.setAttribute('fill', fh); continue; }
       if (!s) { k.r.setAttribute('fill', k.black ? '#222' : '#fff'); k.label.style.display = 'none'; continue; }
       k.r.setAttribute('fill', s.fresh ? HAND_HEX[s.hand] : (s.hand === 'R' ? '#93b8f5' : '#f8b98a'));
       const txt = noteName(m, labels, false);
@@ -49,6 +55,15 @@ export class Keyboard2D implements Renderer {
     }
   }
   frame(): void { /* static */ }
+  pick(cx: number, cy: number): number | null {
+    const el = document.elementFromPoint(cx, cy);
+    const v = el?.getAttribute('data-m');
+    return v ? +v : null;
+  }
+  flash(m: number, hex: string): void {
+    this.flashes.set(m, hex); this.update(...this.last);
+    setTimeout(() => { this.flashes.delete(m); this.update(...this.last); }, 320);
+  }
   resize(): void { /* svg scales */ }
   dispose(): void { this.svg.remove(); }
 }

@@ -10,13 +10,23 @@
 <body data-view="3d">
   <header class="bar" role="toolbar" aria-label="Sterowanie">
     <div class="group">
-      <button id="restart" class="icon" title="Od początku" aria-label="Od początku">⏮</button>
+      <button id="restart" class="icon hide-xs" title="Od początku" aria-label="Od początku">⏮</button>
       <button id="prev" class="icon" title="Poprzednia nuta (←)" aria-label="Poprzednia nuta">◀</button>
       <button id="play" class="play" title="Graj / pauza (spacja)" aria-label="Graj"><span class="i-play">▶</span><span class="i-pause">⏸</span></button>
       <button id="next" class="icon" title="Następna nuta (→)" aria-label="Następna nuta">▶|</button>
     </div>
-    <button id="measureBtn" class="pill" title="Przejdź do taktu"><small>Takt</small> <b id="measure">1</b><small>/<span id="measureTotal">60</span> · <span id="beat">1</span></small></button>
-    <label class="tempo hide-sm"><small>Tempo</small><input data-tempo type="range" min="30" max="160" step="2" /><b class="tempoVal">80</b></label>
+    <button id="measureBtn" class="pill" title="Przejdź do taktu"><small class="hide-xs">Takt </small><b id="measure">1</b><small>/<span id="measureTotal">60</span><span class="hide-xs"> · <span id="beat">1</span></span></small></button>
+    <div class="tempo hide-xs">
+      <button class="icon sm" data-tempo-step="-5" title="Wolniej" aria-label="Wolniej">−</button>
+      <span class="tempoBox" title="Tempo (BPM)"><b class="tempoVal">80</b><small class="hide-xs"> BPM</small></span>
+      <button class="icon sm" data-tempo-step="5" title="Szybciej" aria-label="Szybciej">+</button>
+      <input class="hide-md" data-tempo type="range" min="30" max="160" step="2" aria-label="Tempo" />
+    </div>
+    <div class="group practice">
+      <button id="loopBtn" class="chip" data-toggle="loop" title="Pętla A–B (L)">🔁 <span id="loopLbl">A–B</span></button>
+      <button id="waitBtn" class="chip" data-toggle="wait" title="Czekaj na mnie (W): utwór stoi, aż zagrasz właściwe klawisze">⏳<span class="hide-sm"> Czekaj</span></button>
+      <button id="metroBtn" class="chip hide-xs" data-toggle="metro" title="Metronom (M)">♩<span class="hide-sm"> Metronom</span></button>
+    </div>
     <div data-seg="hands" class="seg hide-xs" role="group" aria-label="Ręce">
       <button data-v="L">L</button><button data-v="both">Obie</button><button data-v="R">P</button>
     </div>
@@ -24,7 +34,8 @@
       <button data-v="learn" title="Z góry (nauka)">⬇︎</button><button data-v="player" title="Widok pianisty">👤</button><button data-v="cinema" title="Kinowy">🎬</button>
     </div>
     <span class="spacer"></span>
-    <span id="fps" class="muted hide-xs"></span>
+    <span id="stats" class="muted"></span>
+    <span id="fps" class="muted hide-sm"></span>
     <button id="audio" class="icon" title="Dźwięk">🔈</button>
     <button id="settingsBtn" class="icon" aria-expanded="false" aria-controls="sheet" title="Ustawienia">⚙︎</button>
   </header>
@@ -40,16 +51,25 @@
     <div class="sheet-head"><b>Ustawienia</b><button id="sheetClose" class="icon" aria-label="Zamknij">✕</button></div>
     <div class="row"><span>Tempo <b class="tempoVal">80</b> BPM</span><input data-tempo type="range" min="30" max="160" step="2" /></div>
     <div class="row"><span>Ręce</span><div data-seg="hands" class="seg"><button data-v="L">Lewa</button><button data-v="both">Obie</button><button data-v="R">Prawa</button></div></div>
+    <h4>Ćwiczenie</h4>
+    <div class="row"><span>Pętla A–B</span><input type="checkbox" class="switch" data-toggle="loop" /></div>
+    <div class="row"><span>Takty</span><span class="loopIn"><input id="loopA" type="number" min="1" /> – <input id="loopB" type="number" min="1" /> <button id="loopHere" class="chip">od tego taktu</button></span></div>
+    <div class="row"><span>Czekaj na mnie<br><small class="muted">utwór stoi, aż zagrasz wybraną ręką; drugą rękę gra aplikacja</small></span><input type="checkbox" class="switch" data-toggle="wait" /></div>
+    <div class="row"><span>Metronom</span><input type="checkbox" class="switch" data-toggle="metro" /></div>
+    <div class="row"><span>Stukanie klawiszy na ekranie gra dźwięk</span><input type="checkbox" class="switch" data-toggle="tapPlays" /></div>
+    <div class="row"><span>Klawiatura MIDI<br><small id="midiStatus" class="muted">podłącz przez USB/Bluetooth</small></span><button id="midiBtn" class="chip">Połącz</button></div>
+    <h4>Widok</h4>
     <div class="row"><span>Widok</span><div data-seg="viewMode" class="seg"><button data-v="3d">3D</button><button data-v="2d">2D</button></div></div>
     <div class="row cam-only"><span>Kamera</span><div data-seg="cam" class="seg"><button data-v="learn">Z góry</button><button data-v="player">Pianista</button><button data-v="cinema">Kinowy</button></div></div>
     <div class="row cam-only"><span>Jakość grafiki</span><div data-seg="quality" class="seg"><button data-v="low">Niska</button><button data-v="medium">Średnia</button><button data-v="high">Wysoka</button></div></div>
     <div class="row"><span>Nazwy nut</span><div data-seg="labels" class="seg"><button data-v="pl">C D E … H</button><button data-v="solf">Do Re Mi</button><button data-v="off">Brak</button></div></div>
     <div class="row cam-only"><span>Kamera śledzi grane nuty</span><input id="follow" type="checkbox" class="switch" /></div>
+    <h4>Dźwięk</h4>
     <div class="row"><span>Dźwięk</span><input id="sound" type="checkbox" class="switch" /></div>
     <div class="row"><span>Instrument <small id="pianoStatus" class="muted"></small></span><div data-seg="instrument" class="seg"><button data-v="piano">🎹 Fortepian</button><button data-v="synth">Syntezator</button></div></div>
     <div class="row"><span>Głośność <b id="volVal">80</b></span><input id="volume" type="range" min="0" max="100" step="1" /></div>
-    <p class="muted small">Skróty: spacja = graj/pauza, ← → = nuta po nucie. W 3D: przeciągnij, aby obrócić, uszczypnij / kółko, aby przybliżyć, ⌖ wraca do presetu.</p>
-    <p class="muted small">Dźwięk: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> (Alexander Holm, CC BY 3.0). Wkrótce: pętla A–B, spadające nuty, tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
+    <p class="muted small">Skróty: spacja = graj/pauza, ← → = nuta po nucie, L = pętla, W = czekaj, M = metronom. W 3D: przeciągnij, aby obrócić, uszczypnij / kółko, aby przybliżyć, ⌖ wraca do presetu.</p>
+    <p class="muted small">Dźwięk: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> (Alexander Holm, CC BY 3.0). Wkrótce: spadające nuty, tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
   </aside>
 
   <script type="module" src="/src/main.ts"></script>

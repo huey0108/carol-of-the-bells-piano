@@ -17,7 +17,7 @@ const BOFF: Record<number, number> = { 1: -0.22, 3: 0.22, 6: -0.28, 8: 0, 10: 0.
 interface Key {
   m: number; black: boolean; pivot: THREE.Group; mesh: THREE.Mesh; mat: THREE.MeshPhysicalMaterial;
   x: number; press: number; target: number; glow: number; glowTarget: number; color: THREE.Color;
-  label?: THREE.Sprite; labelText?: string;
+  label?: THREE.Sprite; labelText?: string; flashT: number; flashColor: THREE.Color;
 }
 
 export class Scene3D implements Renderer {
@@ -38,6 +38,8 @@ export class Scene3D implements Renderer {
   private snapNext = true;
   private animating = true;
   private tmp = new THREE.Color();
+  private ray = new THREE.Raycaster();
+  private meshes: THREE.Mesh[] = [];
   get keyCount() { return this.keys.size; }
 
   constructor(private host: HTMLElement, quality: Quality) {
@@ -101,12 +103,12 @@ export class Scene3D implements Renderer {
         emissive: new THREE.Color(0x000000), envMapIntensity: black ? 1.1 : 0.9,
       });
       const mesh = new THREE.Mesh(black ? bGeo : wGeo, mat);
-      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.m = m; this.meshes.push(mesh);
       const pivot = new THREE.Group();
       pivot.position.set(this.keyX.get(m)!, 0, black ? 0 : 0);
       pivot.add(mesh);
       this.scene.add(pivot);
-      this.keys.set(m, { m, black, pivot, mesh, mat, x: this.keyX.get(m)!, press: 0, target: 0, glow: 0, glowTarget: 0, color: color.clone() });
+      this.keys.set(m, { m, black, pivot, mesh, mat, x: this.keyX.get(m)!, press: 0, target: 0, glow: 0, glowTarget: 0, color: color.clone(), flashT: 0, flashColor: new THREE.Color() });
     }
   }
 
@@ -191,12 +193,14 @@ export class Scene3D implements Renderer {
   frame(dt: number, time: number): void {
     const a = 1 - Math.exp(-dt * 38), r = 1 - Math.exp(-dt * 14);
     for (const k of this.keys.values()) {
-      k.press += (k.target - k.press) * (k.target > k.press ? a : r);
-      k.glow += (k.glowTarget - k.glow) * (k.glowTarget > k.glow ? a : r);
+      const fl = k.flashT > 0; if (fl) k.flashT -= dt;
+      const tgt = fl ? 1 : k.target, gT = fl ? 1 : k.glowTarget, col = fl ? k.flashColor : k.color;
+      k.press += (tgt - k.press) * (tgt > k.press ? a : r);
+      k.glow += (gT - k.glow) * (gT > k.glow ? a : r);
       k.pivot.rotation.x = k.press * (k.black ? PRESS_B : PRESS_W);
       const base = k.black ? 0x0b0b0c : 0xf3efe6;
-      k.mat.color.set(base).lerp(this.tmp.copy(k.color).multiplyScalar(k.black ? 0.9 : 0.62), Math.min(1, k.glow));
-      k.mat.emissive.copy(k.color).multiplyScalar(k.glow * (k.black ? 0.5 : 0.16));
+      k.mat.color.set(base).lerp(this.tmp.copy(col).multiplyScalar(k.black ? 0.9 : 0.62), Math.min(1, k.glow));
+      k.mat.emissive.copy(col).multiplyScalar(k.glow * (k.black ? 0.5 : 0.16));
     }
     if (this.preset === 'cinema' && !this.userControlled) this.computeCamGoal(time);
     if (!this.userControlled) {
@@ -208,6 +212,15 @@ export class Scene3D implements Renderer {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
+
+  pick(cx: number, cy: number): number | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(v, this.camera);
+    const hit = this.ray.intersectObjects(this.meshes, false)[0];
+    return hit ? (hit.object.userData.m as number) : null;
+  }
+  flash(m: number, hex: string): void { const k = this.keys.get(m); if (k) { k.flashT = 0.32; k.flashColor.set(hex); } }
 
   setPreset(p: CamPreset): void { this.preset = p; this.userControlled = false; this.computeCamGoal(); }
   getPreset(): CamPreset { return this.preset; }

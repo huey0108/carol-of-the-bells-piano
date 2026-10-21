@@ -141,6 +141,17 @@ function synthNote(a: AudioContext, dest: AudioNode, m: number, when: number, du
   }
 }
 
+/** Metronome tick (accent = downbeat). */
+export function click(when: number, accent: boolean): void {
+  if (!enabled || !ac || !out) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'square'; o.frequency.value = accent ? 1760 : 1175;
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(accent ? 0.16 : 0.09, when + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+  o.connect(g).connect(out); o.start(when); o.stop(when + 0.06);
+}
+
 /** Schedule a note. vel 0..1. Uses the synth until piano samples are decoded (or if synth is selected). */
 export function tone(m: number, when: number, dur: number, vel = 0.8): void {
   if (!enabled || !ac || !out) return;

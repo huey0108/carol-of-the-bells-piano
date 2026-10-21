@@ -32,7 +32,7 @@ a { color: var(--accent); }
 .tempo { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .tempo b { min-width: 28px; }
 input[type=range] { accent-color: var(--accent); }
-.tempo input { width: 110px; }
+.tempo input { width: 90px; margin-left: 4px; }
 .seg { display: inline-flex; background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
 .seg button { background: transparent; border: 0; border-radius: 7px; padding: 6px 10px; cursor: pointer; color: var(--muted); white-space: nowrap; }
 .seg button[aria-pressed="true"] { background: rgba(255,255,255,.12); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
@@ -84,3 +84,39 @@ body[data-view="2d"] .cam-only { display: none !important; }
 @media (orientation: portrait) and (max-width: 700px) { body:not(.hint-off)[data-view="3d"] .hint { display: inline-flex; } }
 
 body.piano-loading #audio::after { content: '…'; font-size: 11px; }
+
+/* ---------- stage 4: practice controls ---------- */
+.icon.sm { min-width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 16px; }
+.tempoBox { min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
+.tempoBox b { font-size: 15px; }
+.chip { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px; cursor: pointer; white-space: nowrap; color: var(--muted); }
+.chip:hover { color: var(--fg); }
+.chip[aria-pressed="true"] { color: #fff; background: rgba(59,130,246,.22); border-color: rgba(59,130,246,.65); }
+#waitBtn[aria-pressed="true"] { background: rgba(34,197,94,.2); border-color: rgba(34,197,94,.6); }
+#stats { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sheet h4 { margin: 14px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.loopIn { display: inline-flex; align-items: center; gap: 6px; }
+.loopIn input { width: 56px; background: rgba(255,255,255,.06); color: var(--fg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 6px; font: inherit; }
+.waitTag { color: #4ade80; }
+body.is-waiting .now { box-shadow: inset 0 2px 0 #22c55e; }
+body.is-waiting .play { background: linear-gradient(180deg, #34d399, #059669); box-shadow: 0 4px 16px rgba(16,185,129,.45); }
+.seek.has-loop { background: linear-gradient(90deg, transparent var(--la), rgba(59,130,246,.28) var(--la), rgba(59,130,246,.28) var(--lb), transparent var(--lb)), var(--panel); }
+button[disabled] { opacity: .45; cursor: not-allowed; }
+@media (max-width: 1100px) { .hide-md { display: none !important; } }
+
+.row > input.switch { flex: none; margin-left: auto; }
+@media (max-width: 520px) {
+  .bar { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .bar::-webkit-scrollbar { display: none; }
+  .bar > * { flex: none; }
+  .play { width: 40px; height: 40px; }
+  .pill { padding: 5px 9px; }
+  .icon.sm { min-width: 26px; height: 26px; }
+  .chip { padding: 5px 8px; }
+  .tempo { gap: 3px; }
+}
+
+@media (max-width: 520px) {
+  #loopBtn[aria-pressed="false"] #loopLbl { display: none; }
+  #settingsBtn { position: sticky; right: 0; background: var(--panel); }
+}

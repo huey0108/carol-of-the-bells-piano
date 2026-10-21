@@ -12,6 +12,10 @@ export interface Renderer {
   frame(dt: number, time: number): void;
   resize(): void;
   dispose(): void;
+  /** MIDI note under a screen point, or null */
+  pick(clientX: number, clientY: number): number | null;
+  /** Brief press + colour flash for user input feedback */
+  flash(m: number, hex: string): void;
 }
 
 export const HAND_HEX: Record<Hand, string> = { R: '#3b82f6', L: '#f97316' };

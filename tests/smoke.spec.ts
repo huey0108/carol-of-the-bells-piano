@@ -56,3 +56,62 @@ test('piano samples load and are used for playback', async ({ page }) => {
   await page.click('#settingsBtn');
   await expect(page.locator('#pianoStatus')).toHaveText('gotowy');
 });
+
+type W = { __app: { cur: number; playing: boolean; waiting: boolean; gate: number | null; stats: { hits: number; misses: number }; input: (m: number) => void } };
+const st = (page: Page) => page.evaluate(() => { const a = (window as unknown as W).__app; return { cur: a.cur, playing: a.playing, waiting: a.waiting, gate: a.gate, stats: a.stats }; });
+
+test('A–B loop wraps back to A', async ({ page }) => {
+  await page.goto('./');
+  await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
+  await page.click('#settingsBtn');
+  await page.fill('#loopA', '2'); await page.dispatchEvent('#loopA', 'change');
+  await page.fill('#loopB', '2'); await page.dispatchEvent('#loopB', 'change');
+  await page.click('#sheet [data-toggle="loop"]');
+  await page.click('#sheetClose');
+  await expect(page.locator('#loopLbl')).toHaveText('2–2');
+  // 160 bpm → one 3/4 bar = 1.125 s
+  await page.evaluate(() => { const i = document.querySelector('[data-tempo]') as HTMLInputElement; i.value = '160'; i.dispatchEvent(new Event('input')); });
+  await page.click('#play');
+  const seen: number[] = [];
+  for (let i = 0; i < 14; i++) { await page.waitForTimeout(200); seen.push((await st(page)).cur); }
+  expect(Math.min(...seen)).toBeGreaterThanOrEqual(3 - 0.01);
+  expect(Math.max(...seen)).toBeLessThan(6);
+  expect(seen.some((v, i) => i > 0 && v < seen[i - 1])).toBe(true); // wrapped
+});
+
+test('wait mode holds until the right key, counts hits/misses', async ({ page }) => {
+  await page.goto('./');
+  await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
+  await page.click('#waitBtn');
+  await page.click('#play');
+  await page.waitForTimeout(900);
+  let s = await st(page);
+  expect(s.waiting).toBe(true);
+  expect(s.gate).toBe(0);
+  expect(s.cur).toBeLessThan(0.05);
+  await expect(page.locator('#now')).toContainText('Czekam');
+  await page.evaluate(() => (window as unknown as W).__app.input(61)); // wrong
+  await page.evaluate(() => (window as unknown as W).__app.input(67)); // G4 ✓
+  await page.waitForTimeout(300);
+  s = await st(page);
+  expect(s.stats).toEqual({ hits: 1, misses: 1 });
+  expect(s.gate).toBe(1); // next onset F#4
+  await expect(page.locator('#stats')).toContainText('50%');
+});
+
+test('tapping a key on screen registers the note', async ({ page }) => {
+  await page.goto('./');
+  await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
+  await page.click('#waitBtn');
+  // project G4 key centre to screen and tap it
+  const pt = await page.evaluate(() => {
+    const v = (window as unknown as { __app: { view: { pick: (x: number, y: number) => number | null } } }).__app.view;
+    const r = document.querySelector('#stage')!.getBoundingClientRect();
+    for (let y = r.top + 5; y < r.bottom; y += 6) for (let x = r.left; x < r.right; x += 3) if (v.pick(x, y) === 67) return { x, y };
+    return null;
+  });
+  expect(pt).not.toBeNull();
+  await page.mouse.click(pt!.x, pt!.y);
+  await page.waitForTimeout(200);
+  expect((await st(page)).stats.hits).toBe(1);
+});
