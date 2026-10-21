@@ -72,11 +72,14 @@ test('A–B loop wraps back to A', async ({ page }) => {
   // 160 bpm → one 3/4 bar = 1.125 s
   await page.evaluate(() => { const i = document.querySelector('[data-tempo]') as HTMLInputElement; i.value = '160'; i.dispatchEvent(new Event('input')); });
   await page.click('#play');
-  const seen: number[] = [];
-  for (let i = 0; i < 14; i++) { await page.waitForTimeout(200); seen.push((await st(page)).cur); }
-  expect(Math.min(...seen)).toBeGreaterThanOrEqual(3 - 0.01);
-  expect(Math.max(...seen)).toBeLessThan(6);
-  expect(seen.some((v, i) => i > 0 && v < seen[i - 1])).toBe(true); // wrapped
+  const wraps = () => page.evaluate(() => (window as unknown as { __app: { loopWraps: number } }).__app.loopWraps);
+  await expect.poll(wraps, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < 5; i++) {
+    const c = (await st(page)).cur;
+    expect(c).toBeGreaterThanOrEqual(3 - 0.01);
+    expect(c).toBeLessThan(6);
+    await page.waitForTimeout(150);
+  }
 });
 
 test('wait mode holds until the right key, counts hits/misses', async ({ page }) => {

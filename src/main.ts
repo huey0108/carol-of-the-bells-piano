@@ -45,7 +45,7 @@ let cur = 0, playing = false, startAc = 0, startBeat = 0, sched = 0, clickSched 
 // wait mode
 let gate: number | null = null, waiting = false;
 const pressed = new Set<number>();
-let hits = 0, misses = 0;
+let hits = 0, misses = 0, loopWraps = 0;
 
 const handOn = (h: Hand) => settings.hands === 'both' || settings.hands === h;
 const spb = () => 60 / settings.tempo;
@@ -67,7 +67,7 @@ function nextGate(from: number): number | null {
 
 (window as unknown as Record<string, unknown>).__app = {
   get view() { return view; }, get cur() { return cur; }, get playing() { return playing; }, get waiting() { return waiting; },
-  get gate() { return gate; }, get stats() { return { hits, misses }; }, get notes() { return audio.notesPlayed; },
+  get gate() { return gate; }, get stats() { return { hits, misses }; }, get loopWraps() { return loopWraps; }, get notes() { return audio.notesPlayed; },
   audioState, pianoStatus, input: (m: number) => noteInput(m, 'test'), settings,
 };
 
@@ -136,7 +136,7 @@ function schedule(): void {
   const end = playEnd();
 
   if (t >= end - 1e-6) {
-    if (lr) { resetClock(lr[0], 0); t = lr[0]; pressed.clear(); gate = settings.wait ? nextGate(lr[0]) : null; }
+    if (lr) { loopWraps++; resetClock(lr[0], 0); t = lr[0]; pressed.clear(); gate = settings.wait ? nextGate(lr[0]) : null; }
     else { stop(); cur = 0; gate = null; render(0, true); return; }
   }
 
