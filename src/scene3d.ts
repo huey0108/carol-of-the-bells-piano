@@ -251,10 +251,18 @@ export class Scene3D implements Renderer {
   }
 
   dispose(): void {
-    this.controls.dispose(); this.renderer.dispose(); this.renderer.domElement.remove();
+    this.controls.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); this.renderer.domElement.remove();
   }
 }
 
+let webglOk: boolean | null = null;
 export function webglAvailable(): boolean {
-  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+  if (webglOk !== null) return webglOk;
+  try {
+    const c = document.createElement('canvas');
+    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
+    webglOk = !!gl;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch { webglOk = false; }
+  return webglOk;
 }
