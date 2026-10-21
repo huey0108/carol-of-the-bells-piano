@@ -1,12 +1,14 @@
 import './style.css';
-import { EVENTS, ONSETS, END, MEASURES, BEATS_PER_MEASURE, RANGE, noteName, type Hand, type LabelMode } from './score';
-import { ctx, unlock, tone, audioState, setSoundEnabled } from './audio';
+import { EVENTS, ONSETS, END, MEASURES, BEATS_PER_MEASURE, RANGE, noteName, velocity, type Hand, type LabelMode } from './score';
+import { ctx, unlock, tone, audioState, setSoundEnabled, loadPiano, onPianoStatus, setInstrument, setVolume, pianoStatus, type Instrument } from './audio';
 import { Keyboard2D } from './keyboard2d';
+import * as audio from './audio';
+const notesCount = () => audio.notesPlayed;
 import type { CamPreset, KeyState, Quality, Range, Renderer } from './types';
 
 type HandSel = 'both' | 'R' | 'L';
-interface Settings { tempo: number; hands: HandSel; labels: LabelMode; cam: CamPreset; quality: Quality; view: '3d' | '2d'; sound: boolean; follow: boolean }
-const DEF: Settings = { tempo: 80, hands: 'both', labels: 'pl', cam: 'learn', quality: 'medium', view: '3d', sound: true, follow: true };
+interface Settings { tempo: number; hands: HandSel; labels: LabelMode; cam: CamPreset; quality: Quality; view: '3d' | '2d'; sound: boolean; follow: boolean; instrument: Instrument; volume: number }
+const DEF: Settings = { tempo: 80, hands: 'both', labels: 'pl', cam: 'learn', quality: 'medium', view: '3d', sound: true, follow: true, instrument: 'piano', volume: 80 };
 const KEY = 'carol-piano-settings-v1';
 const settings: Settings = { ...DEF, ...(() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })() };
 const save = () => localStorage.setItem(KEY, JSON.stringify(settings));
@@ -28,7 +30,7 @@ async function makeRenderer(): Promise<void> {
   }
   if (!scene3d) view = new Keyboard2D(stage);
   document.body.dataset.view = view.kind;
-  (window as unknown as Record<string, unknown>).__app = { get view() { return view; }, get cur() { return cur; }, get playing() { return playing; }, audioState };
+  (window as unknown as Record<string, unknown>).__app = { get view() { return view; }, get cur() { return cur; }, get playing() { return playing; }, audioState, pianoStatus, get notes() { return notesCount(); } };
   render(cur, true);
 }
 
@@ -86,7 +88,7 @@ function schedule(): void {
   const ahead = t + 0.25 / s;
   for (const e of EVENTS) {
     if (e.t > ahead) break;
-    if (e.t > sched && handOn(e.hand)) tone(e.m, startAc + (e.t - startBeat) * s, e.d * s);
+    if (e.t > sched && handOn(e.hand)) tone(e.m, startAc + (e.t - startBeat) * s, e.d * s, velocity(e));
   }
   sched = Math.max(sched, ahead);
   cur = Math.max(startBeat, t);
@@ -110,7 +112,7 @@ async function stepTo(t: number): Promise<void> {
   if (!settings.sound) return;
   if (await unlock()) {
     const a = ctx();
-    for (const e of EVENTS) if (Math.abs(e.t - cur) < 1e-6 && handOn(e.hand)) tone(e.m, a.currentTime + 0.02, Math.min(e.d, 2) * spb());
+    for (const e of EVENTS) if (Math.abs(e.t - cur) < 1e-6 && handOn(e.hand)) tone(e.m, a.currentTime + 0.02, Math.min(e.d, 2) * spb(), velocity(e));
   }
   setAudioBadge();
 }
@@ -171,6 +173,15 @@ function initUI(): void {
 
   const snd = $('#sound') as HTMLInputElement; snd.checked = settings.sound; setSoundEnabled(settings.sound);
   snd.onchange = () => { settings.sound = snd.checked; setSoundEnabled(snd.checked); setAudioBadge(); save(); };
+  setInstrument(settings.instrument); setVolume(settings.volume / 100);
+  seg('instrument', settings.instrument, v => { settings.instrument = v as Instrument; setInstrument(settings.instrument); if (v === 'piano') void loadPiano(); save(); });
+  const vol = $('#volume') as HTMLInputElement; vol.value = String(settings.volume); $('#volVal').textContent = String(settings.volume);
+  vol.oninput = () => { settings.volume = +vol.value; $('#volVal').textContent = vol.value; setVolume(settings.volume / 100); save(); };
+  onPianoStatus(st => {
+    const el = $('#pianoStatus');
+    el.textContent = st.state === 'ready' ? (st.loaded === st.total ? 'gotowy' : `gotowy (${st.loaded}/${st.total})`) : st.state === 'loading' ? `ładowanie ${st.loaded}/${st.total}…` : st.state === 'error' ? 'błąd: używam syntezatora' : '';
+    document.body.classList.toggle('piano-loading', st.state === 'loading');
+  });
   const fol = $('#follow') as HTMLInputElement; fol.checked = settings.follow;
   fol.onchange = () => { settings.follow = fol.checked; render(cur, true); save(); };
   $('#audio').onclick = async () => { await unlock(); setAudioBadge(); };
@@ -194,4 +205,5 @@ function initUI(): void {
 }
 
 initUI();
+if (settings.instrument === 'piano') void loadPiano();
 void makeRenderer().then(() => requestAnimationFrame(loop));

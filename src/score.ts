@@ -92,3 +92,20 @@ export const noteName = (m: number, mode: LabelMode = 'pl', octave = true): stri
   return (mode === 'solf' ? SOLF[p] : PL[p]) + (octave ? String(Math.floor(m / 12) - 1) : '');
 };
 export const isBlack = (m: number) => [1, 3, 6, 8, 10].includes(m % 12);
+
+// Dynamics per measure (from the score: p → mp → mf → f, ending pp), as velocity 0..1.
+const DYN_MARKS: [number, number][] = [
+  // [first measure (1-based), velocity]
+  [1, 0.42], [11, 0.48], [13, 0.55], [17, 0.6], [18, 0.66], [19, 0.72], [20, 0.62], [21, 0.56], [22, 0.72], [23, 0.56], [24, 0.72],
+  [25, 0.86], [41, 0.56], [42, 0.72], [43, 0.56], [44, 0.72], [45, 0.56], [49, 0.6], [50, 0.66], [51, 0.72], [52, 0.78],
+  [53, 0.42], [57, 0.38], [58, 0.34], [59, 0.3], [60, 0.24],
+];
+export function velocity(e: NoteEvent): number {
+  let v = DYN_MARKS[0][1];
+  for (const [m, d] of DYN_MARKS) if (e.mi + 1 >= m) v = d;
+  // melody (right hand) sings over the accompaniment; downbeats slightly accented
+  const beat = e.t - e.mi * BEATS_PER_MEASURE;
+  v *= e.hand === 'R' ? 1 : 0.82;
+  if (beat < 1e-6) v *= 1.06;
+  return Math.max(0.1, Math.min(1, v));
+}

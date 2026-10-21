@@ -44,3 +44,15 @@ test('step, settings sheet, 2D fallback toggle', async ({ page }) => {
   await page.click('#sheet [data-seg="viewMode"] button[data-v="3d"]');
   await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
 });
+
+test('piano samples load and are used for playback', async ({ page }) => {
+  await page.goto('./');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __app: { pianoStatus: () => { state: string; loaded: number; total: number } } }).__app?.pianoStatus()), { timeout: 25_000 })
+    .toMatchObject({ state: 'ready', loaded: 19, total: 19 });
+  await page.click('#play');
+  await page.waitForTimeout(1500);
+  const n = await page.evaluate(() => (window as unknown as { __app: { notes: number } }).__app.notes);
+  expect(n).toBeGreaterThan(2);
+  await page.click('#settingsBtn');
+  await expect(page.locator('#pianoStatus')).toHaveText('gotowy');
+});

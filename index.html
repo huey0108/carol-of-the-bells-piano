@@ -46,8 +46,10 @@
     <div class="row"><span>Nazwy nut</span><div data-seg="labels" class="seg"><button data-v="pl">C D E … H</button><button data-v="solf">Do Re Mi</button><button data-v="off">Brak</button></div></div>
     <div class="row cam-only"><span>Kamera śledzi grane nuty</span><input id="follow" type="checkbox" class="switch" /></div>
     <div class="row"><span>Dźwięk</span><input id="sound" type="checkbox" class="switch" /></div>
+    <div class="row"><span>Instrument <small id="pianoStatus" class="muted"></small></span><div data-seg="instrument" class="seg"><button data-v="piano">🎹 Fortepian</button><button data-v="synth">Syntezator</button></div></div>
+    <div class="row"><span>Głośność <b id="volVal">80</b></span><input id="volume" type="range" min="0" max="100" step="1" /></div>
     <p class="muted small">Skróty: spacja = graj/pauza, ← → = nuta po nucie. W 3D: przeciągnij, aby obrócić, uszczypnij / kółko, aby przybliżyć, ⌖ wraca do presetu.</p>
-    <p class="muted small">Etap 1–2 (szkielet + klawiatura 3D). Wkrótce: prawdziwy dźwięk fortepianu, pętla A–B, spadające nuty, tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
+    <p class="muted small">Dźwięk: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> (Alexander Holm, CC BY 3.0). Wkrótce: pętla A–B, spadające nuty, tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
   </aside>
 
   <script type="module" src="/src/main.ts"></script>

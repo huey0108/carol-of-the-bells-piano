@@ -1,19 +1,25 @@
-// WebAudio: context + iOS unlock + simple piano-like synth (stage 3 replaces it with Salamander samples).
+// WebAudio engine: context + iOS unlock, Salamander Grand Piano sampler (fallback: simple synth).
+// Samples: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0 (mp3 set from tonejs.github.io/audio/salamander).
 let ac: AudioContext | null = null;
 let out: GainNode | null = null;
 let unlocked = false;
 let enabled = true;
+let volume = 0.8;
 
+export type Instrument = 'piano' | 'synth';
+let instrument: Instrument = 'piano';
+export const setInstrument = (i: Instrument) => { instrument = i; };
 export const setSoundEnabled = (on: boolean) => { enabled = on; };
 export const soundEnabled = () => enabled;
+export function setVolume(v: number): void { volume = v; if (out && ac) out.gain.setTargetAtTime(v, ac.currentTime, 0.02); }
 
 export function ctx(): AudioContext {
   if (!ac) {
     const C = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     ac = new C({ latencyHint: 'interactive' });
     const comp = ac.createDynamicsCompressor();
-    comp.threshold.value = -16; comp.ratio.value = 4;
-    out = ac.createGain(); out.gain.value = 0.9;
+    comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.2;
+    out = ac.createGain(); out.gain.value = volume;
     out.connect(comp).connect(ac.destination);
   }
   return ac;
@@ -48,15 +54,80 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && ac && ac.state !== 'running') ac.resume().catch(() => {});
 });
 
+// ---------- Salamander sampler ----------
+// One sample every minor third (A1..D#6) covers the piece (B1..B5); playbackRate shifts ≤ ±1.5 semitones.
+const SAMPLE_NOTES: [string, number][] = [
+  ['A1', 33], ['C2', 36], ['Ds2', 39], ['Fs2', 42], ['A2', 45], ['C3', 48], ['Ds3', 51], ['Fs3', 54], ['A3', 57],
+  ['C4', 60], ['Ds4', 63], ['Fs4', 66], ['A4', 69], ['C5', 72], ['Ds5', 75], ['Fs5', 78], ['A5', 81], ['C6', 84], ['Ds6', 87],
+];
+const buffers = new Map<number, AudioBuffer>();
+let loadState: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+let loaded = 0;
+export const pianoStatus = () => ({ state: loadState, loaded, total: SAMPLE_NOTES.length });
+type Listener = (s: ReturnType<typeof pianoStatus>) => void;
+const listeners: Listener[] = [];
+export const onPianoStatus = (f: Listener) => { listeners.push(f); f(pianoStatus()); };
+const emit = () => listeners.forEach(f => f(pianoStatus()));
+
+const decode = (a: AudioContext, data: ArrayBuffer) => new Promise<AudioBuffer>((res, rej) => {
+  const p = a.decodeAudioData(data, res, rej) as unknown as Promise<AudioBuffer> | undefined; // callback form for older Safari
+  if (p && typeof p.then === 'function') p.then(res, rej);
+});
+
+export function loadPiano(): Promise<void> {
+  if (loadState === 'loading' || loadState === 'ready') return Promise.resolve();
+  loadState = 'loading'; loaded = 0; emit();
+  const a = ctx(); // decoding works while the context is still suspended
+  const base = `${import.meta.env.BASE_URL}samples/salamander/`;
+  return Promise.allSettled(SAMPLE_NOTES.map(async ([name, m]) => {
+    const r = await fetch(base + name + '.mp3');
+    if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+    buffers.set(m, await decode(a, await r.arrayBuffer()));
+    loaded++; emit();
+  })).then(rs => {
+    const bad = rs.filter(r => r.status === 'rejected');
+    if (bad.length) console.warn('piano samples failed', bad);
+    loadState = buffers.size ? 'ready' : 'error'; emit();
+  });
+}
+
+function nearest(m: number): [number, AudioBuffer] | null {
+  let best: [number, AudioBuffer] | null = null;
+  for (const [sm, b] of buffers) if (!best || Math.abs(sm - m) < Math.abs(best[0] - m)) best = [sm, b];
+  return best;
+}
+
 export let notesPlayed = 0;
-export function tone(m: number, when: number, dur: number, vel = 0.8): void {
-  if (!enabled || !ac || !out) return;
-  const a = ac, f = 440 * 2 ** ((m - 69) / 12);
+
+function pianoNote(a: AudioContext, dest: AudioNode, m: number, when: number, dur: number, vel: number): boolean {
+  const s = nearest(m); if (!s) return false;
+  const src = a.createBufferSource();
+  src.buffer = s[1];
+  const rate = 2 ** ((m - s[0]) / 12);
+  src.playbackRate.value = rate;
+  // brightness follows velocity (soft notes are darker), like a real hammer
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.value = 1500 + vel * vel * 15000; lp.Q.value = 0.3;
+  const g = a.createGain();
+  const peak = 1.5 * vel ** 1.4;
+  const off = when + Math.max(0.12, dur);
+  const releaseT = m < 40 ? 0.4 : m < 60 ? 0.25 : 0.15; // dampers stop the bass more slowly
+  g.gain.setValueAtTime(peak, when);
+  g.gain.setValueAtTime(peak, off);
+  g.gain.setTargetAtTime(0, off, releaseT / 3);
+  src.connect(lp).connect(g).connect(dest);
+  src.start(when, 0);
+  src.stop(Math.min(when + s[1].duration / rate, off + releaseT * 3));
+  return true;
+}
+
+function synthNote(a: AudioContext, dest: AudioNode, m: number, when: number, dur: number, vel: number): void {
+  const f = 440 * 2 ** ((m - 69) / 12);
   const lp = a.createBiquadFilter(); lp.type = 'lowpass';
   lp.frequency.setValueAtTime(Math.min(14000, f * 9), when);
   lp.frequency.setTargetAtTime(Math.max(f * 2, 400), when + 0.01, 0.6);
   const g = a.createGain();
-  lp.connect(g); g.connect(out);
+  lp.connect(g); g.connect(dest);
   const peak = (m < 48 ? 0.32 : 0.22) * vel;
   const rel = when + Math.max(0.2, dur);
   g.gain.setValueAtTime(0, when);
@@ -68,5 +139,12 @@ export function tone(m: number, when: number, dur: number, vel = 0.8): void {
     o.type = type; o.frequency.value = f * h; o.detune.value = det; og.gain.value = amp;
     o.connect(og).connect(lp); o.start(when); o.stop(rel + 0.7);
   }
+}
+
+/** Schedule a note. vel 0..1. Uses the synth until piano samples are decoded (or if synth is selected). */
+export function tone(m: number, when: number, dur: number, vel = 0.8): void {
+  if (!enabled || !ac || !out) return;
+  const ok = instrument === 'piano' && pianoNote(ac, out, m, when, dur, vel);
+  if (!ok) synthNote(ac, out, m, when, dur, vel);
   notesPlayed++;
 }
