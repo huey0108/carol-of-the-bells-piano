@@ -16,6 +16,8 @@ export interface Renderer {
   pick(clientX: number, clientY: number): number | null;
   /** Brief press + colour flash for user input feedback */
   flash(m: number, hex: string): void;
+  /** Current playback position in beats (for time-based visuals) */
+  setTime?(beat: number): void;
 }
 
 export const HAND_HEX: Record<Hand, string> = { R: '#3b82f6', L: '#f97316' };

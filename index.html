@@ -60,6 +60,7 @@
     <div class="row"><span>Klawiatura MIDI<br><small id="midiStatus" class="muted">podłącz przez USB/Bluetooth</small></span><button id="midiBtn" class="chip">Połącz</button></div>
     <h4>Widok</h4>
     <div class="row"><span>Widok</span><div data-seg="viewMode" class="seg"><button data-v="3d">3D</button><button data-v="2d">2D</button></div></div>
+    <div class="row cam-only"><span>Spadające nuty</span><input type="checkbox" class="switch" data-toggle="notes" /></div>
     <div class="row cam-only"><span>Kamera</span><div data-seg="cam" class="seg"><button data-v="learn">Z góry</button><button data-v="player">Pianista</button><button data-v="cinema">Kinowy</button></div></div>
     <div class="row cam-only"><span>Jakość grafiki</span><div data-seg="quality" class="seg"><button data-v="low">Niska</button><button data-v="medium">Średnia</button><button data-v="high">Wysoka</button></div></div>
     <div class="row"><span>Nazwy nut</span><div data-seg="labels" class="seg"><button data-v="pl">C D E … H</button><button data-v="solf">Do Re Mi</button><button data-v="off">Brak</button></div></div>
@@ -68,8 +69,8 @@
     <div class="row"><span>Dźwięk</span><input id="sound" type="checkbox" class="switch" /></div>
     <div class="row"><span>Instrument <small id="pianoStatus" class="muted"></small></span><div data-seg="instrument" class="seg"><button data-v="piano">🎹 Fortepian</button><button data-v="synth">Syntezator</button></div></div>
     <div class="row"><span>Głośność <b id="volVal">80</b></span><input id="volume" type="range" min="0" max="100" step="1" /></div>
-    <p class="muted small">Skróty: spacja = graj/pauza, ← → = nuta po nucie, L = pętla, W = czekaj, M = metronom. W 3D: przeciągnij, aby obrócić, uszczypnij / kółko, aby przybliżyć, ⌖ wraca do presetu.</p>
-    <p class="muted small">Dźwięk: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> (Alexander Holm, CC BY 3.0). Wkrótce: spadające nuty, tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
+    <p class="muted small">Skróty: spacja = graj/pauza, ← → = nuta po nucie, L = pętla, W = czekaj, M = metronom, N = spadające nuty. W 3D: przeciągnij, aby obrócić, uszczypnij / kółko, aby przybliżyć, ⌖ wraca do presetu.</p>
+    <p class="muted small">Dźwięk: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> (Alexander Holm, CC BY 3.0). Wkrótce: tryb offline. <a href="./legacy-2d.html">Stara wersja</a></p>
   </aside>
 
   <script type="module" src="/src/main.ts"></script>

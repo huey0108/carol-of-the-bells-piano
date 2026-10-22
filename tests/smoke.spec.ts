@@ -118,3 +118,13 @@ test('tapping a key on screen registers the note', async ({ page }) => {
   await page.waitForTimeout(200);
   expect((await st(page)).stats.hits).toBe(1);
 });
+
+test('falling notes lane shows upcoming notes and can be toggled off', async ({ page }) => {
+  await page.goto('./');
+  await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
+  const n = () => page.evaluate(() => (window as unknown as { __app: { falling: number } }).__app.falling);
+  await expect.poll(n).toBeGreaterThan(3);
+  await page.click('#settingsBtn');
+  await page.click('#sheet [data-toggle="notes"]');
+  await expect.poll(n).toBe(0);
+});

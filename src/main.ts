@@ -9,11 +9,11 @@ import type { CamPreset, KeyState, Quality, Range, Renderer } from './types';
 type HandSel = 'both' | 'R' | 'L';
 interface Settings {
   tempo: number; hands: HandSel; labels: LabelMode; cam: CamPreset; quality: Quality; view: '3d' | '2d'; sound: boolean; follow: boolean;
-  instrument: Instrument; volume: number; loop: boolean; loopA: number; loopB: number; wait: boolean; metro: boolean; tapPlays: boolean;
+  instrument: Instrument; volume: number; loop: boolean; loopA: number; loopB: number; wait: boolean; metro: boolean; tapPlays: boolean; notes: boolean;
 }
 const DEF: Settings = {
   tempo: 80, hands: 'both', labels: 'pl', cam: 'learn', quality: 'medium', view: '3d', sound: true, follow: true,
-  instrument: 'piano', volume: 80, loop: false, loopA: 1, loopB: 4, wait: false, metro: false, tapPlays: true,
+  instrument: 'piano', volume: 80, loop: false, loopA: 1, loopB: 4, wait: false, metro: false, tapPlays: true, notes: true,
 };
 const KEY = 'carol-piano-settings-v1';
 const settings: Settings = { ...DEF, ...(() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })() };
@@ -31,7 +31,7 @@ async function makeRenderer(): Promise<void> {
   if (settings.view === '3d') {
     const mod = await import('./scene3d');
     if (mod.webglAvailable()) {
-      try { scene3d = new mod.Scene3D(stage, settings.quality); scene3d.setPreset(settings.cam); view = scene3d; }
+      try { scene3d = new mod.Scene3D(stage, settings.quality); scene3d.setFalling(settings.notes, settings.hands); scene3d.setPreset(settings.cam); view = scene3d; }
       catch (e) { console.warn('3D failed, falling back to 2D', e); }
     }
   }
@@ -67,7 +67,7 @@ function nextGate(from: number): number | null {
 
 (window as unknown as Record<string, unknown>).__app = {
   get view() { return view; }, get cur() { return cur; }, get playing() { return playing; }, get waiting() { return waiting; },
-  get gate() { return gate; }, get stats() { return { hits, misses }; }, get loopWraps() { return loopWraps; }, get notes() { return audio.notesPlayed; },
+  get gate() { return gate; }, get stats() { return { hits, misses }; }, get loopWraps() { return loopWraps; }, get falling() { return scene3d ? scene3d.fallingCount() : -1; }, get notes() { return audio.notesPlayed; },
   audioState, pianoStatus, input: (m: number) => noteInput(m, 'test'), settings,
 };
 
@@ -104,6 +104,7 @@ function render(t: number, force = false): void {
   let f = focusFor(t);
   if (!force && Math.floor(t / 3) === Math.floor(lastRenderT / 3)) f = lastFocus;
   lastFocus = f; lastRenderT = t;
+  view?.setTime?.(t);
   view?.update(act, settings.labels, f);
   const mi = Math.min(MEASURES - 1, Math.floor(t / BEATS_PER_MEASURE));
   $('#measure').textContent = `${mi + 1}`;
@@ -311,7 +312,7 @@ function initUI(): void {
     const n = v ? parseInt(v, 10) : NaN; if (n >= 1 && n <= MEASURES) void stepTo((n - 1) * BEATS_PER_MEASURE);
   };
 
-  seg('hands', settings.hands, v => { settings.hands = v as HandSel; gate = null; save(); render(cur, true); });
+  seg('hands', settings.hands, v => { settings.hands = v as HandSel; scene3d?.setFalling(settings.notes, settings.hands); gate = null; save(); render(cur, true); });
   seg('cam', settings.cam, v => { settings.cam = v as CamPreset; scene3d?.setPreset(settings.cam); save(); });
   seg('labels', settings.labels, v => { settings.labels = v as LabelMode; render(cur, true); save(); });
   seg('quality', settings.quality, v => { settings.quality = v as Quality; scene3d?.setQuality(settings.quality); save(); });
@@ -338,6 +339,9 @@ function initUI(): void {
   document.body.classList.toggle('wait-on', settings.wait);
   toggle('metro', () => { clickSched = Math.max(clickSched, cur); });
   toggle('tapPlays');
+  const showNotes = () => document.body.classList.toggle('notes-on', settings.notes);
+  const setNotes = toggle('notes', () => { scene3d?.setFalling(settings.notes, settings.hands); showNotes(); });
+  showNotes();
   showLoop();
 
   // --- sound
@@ -391,6 +395,7 @@ function initUI(): void {
     else if (e.key === 'l' || e.key === 'L') ($('#loopBtn') as HTMLButtonElement).click();
     else if (e.key === 'w' || e.key === 'W') ($('#waitBtn') as HTMLButtonElement).click();
     else if (e.key === 'm' || e.key === 'M') ($('#metroBtn') as HTMLButtonElement).click();
+    else if (e.key === 'n' || e.key === 'N') setNotes();
     else if (e.key === 'Escape') toggleSheet(false);
   });
   new ResizeObserver(() => view?.resize()).observe(stage);
