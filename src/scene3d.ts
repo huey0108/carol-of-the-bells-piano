@@ -4,14 +4,15 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { EVENTS, isBlack, noteName, type LabelMode } from './score';
+import { isBlack, noteName, type LabelMode } from './score';
+import { FallingLane, type LaneLabels, type LaneStyle } from './falling';
 import { HAND_HEX, type CamPreset, type KeyState, type Quality, type Range, type Renderer } from './types';
 
 // Real dimensions (metres)
 const WW = 0.0235, WGAP = 0.0009, WL = 0.15, WH = 0.022;
 const BW = 0.0137, BL = 0.095, BH = 0.012;
 // Falling-notes lane: LOOK beats ahead mapped onto LANE metres behind the keys
-const LANE = 0.32, LOOK = 6, HIT_Z = -0.008;
+const LANE = 0.34, LOOK = 6, HIT_Z = -0.008;
 const PRESS_W = THREE.MathUtils.degToRad(3.6), PRESS_B = THREE.MathUtils.degToRad(3.0);
 // Black key offset from the gap between neighbouring whites (fraction of BW): C# D# | F# G# A#
 const BOFF: Record<number, number> = { 1: -0.22, 3: 0.22, 6: -0.28, 8: 0, 10: 0.28 };
@@ -40,11 +41,8 @@ export class Scene3D implements Renderer {
   private snapNext = true;
   private animating = true;
   private tmp = new THREE.Color();
-  private falling = true; private beat = 0; private lastBeat = -1; private noteVisible = 0;
-  private handSel: 'both' | 'R' | 'L' = 'both';
-  private noteMesh!: THREE.InstancedMesh; private barLines: THREE.Mesh[] = [];
-  private laneGroup = new THREE.Group(); private backParts: THREE.Object3D[] = [];
-  private m4 = new THREE.Matrix4();
+  private falling = true;
+  private lane!: FallingLane; private backParts: THREE.Object3D[] = [];
   private ray = new THREE.Raycaster();
   private meshes: THREE.Mesh[] = [];
   get keyCount() { return this.keys.size; }
@@ -75,7 +73,8 @@ export class Scene3D implements Renderer {
 
     this.buildKeys();
     this.buildCase();
-    this.buildFalling();
+    this.lane = new FallingLane({ keyX: this.keyX, ww: WW, bw: BW, hitZ: HIT_Z, lane: LANE, look: LOOK, width: 52 * WW });
+    this.scene.add(this.lane.group);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true; this.controls.dampingFactor = 0.08;
@@ -151,7 +150,7 @@ export class Scene3D implements Renderer {
     this.backParts.push(fb, body, desk, logo);
     // floor
     const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.9 }));
-    floor.rotation.x = -Math.PI / 2; floor.position.y = -0.75; floor.receiveShadow = true; this.scene.add(floor);
+    floor.rotation.x = -Math.PI / 2; floor.position.y = -0.75; floor.receiveShadow = true; this.scene.add(floor); this.backParts.push(floor);
     this.key.target.position.set(0, 0, 0.06);
   }
 
@@ -200,7 +199,7 @@ export class Scene3D implements Renderer {
   }
 
   frame(dt: number, time: number): void {
-    if (this.falling && this.beat !== this.lastBeat) this.updateNotes();
+    if (this.falling) this.lane.frame(dt, time);
     const a = 1 - Math.exp(-dt * 38), r = 1 - Math.exp(-dt * 14);
     for (const k of this.keys.values()) {
       const fl = k.flashT > 0; if (fl) k.flashT -= dt;
@@ -233,66 +232,24 @@ export class Scene3D implements Renderer {
   flash(m: number, hex: string): void { const k = this.keys.get(m); if (k) { k.flashT = 0.32; k.flashColor.set(hex); } }
 
   // ---------- falling notes ----------
-  private buildFalling(): void {
-    const g = this.laneGroup; this.scene.add(g);
-    const width = 52 * WW, zc = HIT_Z - LANE / 2;
-    const flat = (w: number, d: number, color: number, x: number, y: number, z: number) => {
-      const me = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color }));
-      me.rotation.x = -Math.PI / 2; me.position.set(x, y, z); g.add(me); return me;
-    };
-    flat(width, LANE, 0x0b0e15, 0, -0.001, zc);
-    for (let m = 24; m <= 108; m += 12) flat(0.0012, LANE, 0x232a3a, this.keyX.get(m)! - WW / 2, 0, zc); // octave guides (before each C)
-    for (let i = 0; i < 4; i++) { const b = flat(width, 0.0016, 0x343c50, 0, 0.0004, 0); b.visible = false; this.barLines.push(b); }
-    const hit = new THREE.Mesh(new THREE.BoxGeometry(width, 0.002, 0.003), new THREE.MeshBasicMaterial({ color: 0x5b8cff }));
-    hit.position.set(0, 0.006, HIT_Z + 0.002); g.add(hit);
-    this.noteMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), EVENTS.length);
-    this.noteMesh.frustumCulled = false;
-    this.recolorNotes();
-    g.add(this.noteMesh);
-  }
-  private recolorNotes(): void {
-    const c = new THREE.Color();
-    EVENTS.forEach((e, i) => {
-      c.set(HAND_HEX[e.hand]);
-      if (isBlack(e.m)) c.multiplyScalar(0.68);
-      if (this.handSel !== 'both' && e.hand !== this.handSel) c.multiplyScalar(0.3); // other hand is auto-played: dim it
-      this.noteMesh.setColorAt(i, c);
-    });
-    if (this.noteMesh.instanceColor) this.noteMesh.instanceColor.needsUpdate = true;
-  }
-  private updateNotes(): void {
-    this.lastBeat = this.beat;
-    const S = LANE / LOOK, m4 = this.m4; let vis = 0;
-    EVENTS.forEach((e, i) => {
-      const s = e.t - this.beat, en = e.t + e.d - this.beat;
-      if (en <= 0 || s >= LOOK) m4.makeScale(0, 0, 0);
-      else {
-        const zF = HIT_Z - Math.max(0, s) * S, zB = HIT_Z - Math.min(LOOK, en) * S;
-        const depth = Math.max(0.001, zF - zB - 0.0016);
-        const black = isBlack(e.m);
-        m4.makeScale(black ? BW * 0.82 : WW * 0.72, 0.005, depth);
-        m4.setPosition(this.keyX.get(e.m)!, black ? 0.0045 : 0.003, zF - depth / 2);
-        vis++;
-      }
-      this.noteMesh.setMatrixAt(i, m4);
-    });
-    this.noteMesh.instanceMatrix.needsUpdate = true;
-    this.noteVisible = vis;
-    const b0 = Math.ceil(this.beat / 3 - 1e-6) * 3;
-    this.barLines.forEach((b, i) => {
-      const rel = b0 + 3 * i - this.beat;
-      b.visible = rel < LOOK; b.position.z = HIT_Z - rel * S;
-    });
-  }
-  setTime(beat: number): void { this.beat = beat; }
+  setTime(beat: number): void { this.lane.setTime(beat); }
   setFalling(on: boolean, hands: 'both' | 'R' | 'L'): void {
-    this.falling = on; this.laneGroup.visible = on;
+    this.falling = on; this.lane.group.visible = on;
     this.backParts.forEach(o => { o.visible = !on; });
-    if (hands !== this.handSel) { this.handSel = hands; this.recolorNotes(); }
-    this.lastBeat = -1; this.noteVisible = 0;
+    this.lane.setHands(hands);
     this.computeCamGoal();
   }
-  fallingCount(): number { return this.falling ? this.noteVisible : 0; }
+  setLaneOptions(o: { labels?: LaneLabels; names?: LabelMode; style?: LaneStyle }): void {
+    if (o.labels) this.lane.setLabels(o.labels);
+    if (o.names) this.lane.setNameMode(o.names);
+    if (o.style) {
+      this.lane.setStyle(o.style);
+      const bg = o.style === 'neon' ? 0x02060d : 0x0d0f14;
+      (this.scene.background as THREE.Color).set(bg); (this.scene.fog as THREE.Fog).color.set(bg);
+    }
+  }
+  fallingCount(): number { return this.falling ? this.lane.count() : 0; }
+  laneLabelCount(): number { return this.falling ? this.lane.labelCount() : 0; }
 
   setPreset(p: CamPreset): void { this.preset = p; this.userControlled = false; this.computeCamGoal(); }
   getPreset(): CamPreset { return this.preset; }
@@ -314,8 +271,8 @@ export class Scene3D implements Renderer {
     if (this.falling) {
       if (this.preset === 'learn') {
         dir.set(0, 0.95, 0.31).normalize();
-        tgt.z = (WL - LANE) / 2;
-        dist = Math.max(dist, ((WL + LANE) * 1.06) / 2 / Math.tan(vfov / 2));
+        tgt.z = (WL - LANE - 0.08) / 2;
+        dist = Math.max(dist, ((WL + LANE + 0.08) * 1.03) / 2 / Math.tan(vfov / 2));
       } else if (this.preset === 'player') { tgt.z = WL * 0.1; tgt.y = 0.03; dist *= 1.1; }
     }
     this.camGoal.tgt.copy(tgt);
@@ -330,6 +287,7 @@ export class Scene3D implements Renderer {
     this.renderer.shadowMap.enabled = sh;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.key.castShadow = sh;
+    this.lane?.setQuality(q);
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
     this.resize();
   }

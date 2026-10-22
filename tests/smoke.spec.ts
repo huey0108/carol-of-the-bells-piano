@@ -124,7 +124,14 @@ test('falling notes lane shows upcoming notes and can be toggled off', async ({ 
   await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
   const n = () => page.evaluate(() => (window as unknown as { __app: { falling: number } }).__app.falling);
   await expect.poll(n).toBeGreaterThan(3);
+  const labels = () => page.evaluate(() => (window as unknown as { __app: { laneLabels: number } }).__app.laneLabels);
+  await expect.poll(labels).toBeGreaterThan(3);
   await page.click('#settingsBtn');
+  await page.click('#sheet [data-seg="laneLabels"] button[data-v="off"]');
+  await expect.poll(labels).toBe(0);
+  await page.click('#sheet [data-seg="laneLabels"] button[data-v="top"]');
+  await expect.poll(labels).toBeGreaterThan(0);
+  await page.click('#sheet [data-seg="laneStyle"] button[data-v="classic"]');
   await page.click('#sheet [data-toggle="notes"]');
   await expect.poll(n).toBe(0);
 });
