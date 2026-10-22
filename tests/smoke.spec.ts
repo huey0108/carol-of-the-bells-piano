@@ -22,11 +22,10 @@ test('play advances the transport and starts audio', async ({ page }) => {
   await page.goto('./');
   await expect.poll(() => app(page).then(a => a?.kind), { timeout: 25_000 }).toBe('3d');
   await page.click('#play');
-  await page.waitForTimeout(2500);
+  await expect.poll(() => app(page).then(a => a!.cur), { timeout: 25_000 }).toBeGreaterThan(1.5);
   const a = (await app(page))!;
   expect(a.playing).toBe(true);
   expect(a.audio).toBe('running');
-  expect(a.cur).toBeGreaterThan(1.5);
   await page.click('#play');
   expect((await app(page))!.playing).toBe(false);
 });
@@ -50,9 +49,7 @@ test('piano samples load and are used for playback', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => (window as unknown as { __app: { pianoStatus: () => { state: string; loaded: number; total: number } } }).__app?.pianoStatus()), { timeout: 25_000 })
     .toMatchObject({ state: 'ready', loaded: 19, total: 19 });
   await page.click('#play');
-  await page.waitForTimeout(1500);
-  const n = await page.evaluate(() => (window as unknown as { __app: { notes: number } }).__app.notes);
-  expect(n).toBeGreaterThan(2);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __app: { notes: number } }).__app.notes), { timeout: 25_000 }).toBeGreaterThan(2);
   await page.click('#settingsBtn');
   await expect(page.locator('#pianoStatus')).toHaveText('gotowy');
 });
